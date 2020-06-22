@@ -16,33 +16,36 @@ namespace Microsoft.Quantum.Kata.QuantumClassification {
     }
 
     // The definition of classifier structure for the case when the data is linearly separable and fits into 1 qubit
-    function ClassifierStructure() : ControlledRotation[] {
+    function LinearClassifierStructure() : ControlledRotation[] {
         return [
             ControlledRotation((0, new Int[0]), PauliY, 0)
         ];
     }
 
-
     // Entry point for training a model; takes the data as the input and uses hard-coded classifier structure.
     operation TrainLinearlySeparableModel(
         trainingVectors : Double[][],
         trainingLabels : Int[],
-        initialParameters : Double[][]
+        initialParameters : Double[][],
+        mode : Int,
+        auxil: Double[]
     ) : (Double[], Double) {
         // convert training data and labels into a single data structure
         let samples = Mapped(
             LabeledSample,
-            Zip(trainingVectors, trainingLabels)
+            Zip(Mapped(FeaturesPreprocess(mode, auxil, _), trainingVectors), trainingLabels)
         );
         let (optimizedModel, nMisses) = TrainSequentialClassifier(
             Mapped(
-                SequentialModel(ClassifierStructure(), _, 0.0),
+                SequentialModel(LinearClassifierStructure(), _, 0.0),
                 initialParameters
             ),
             samples,
             DefaultTrainingOptions()
                 w/ LearningRate <- 2.0
-                w/ Tolerance <- 0.0005,
+                w/ NMeasurements <- 10000
+                w/ Tolerance <- 0.0005
+                w/ VerboseMessage <- Message,
             DefaultSchedule(trainingVectors),
             DefaultSchedule(trainingVectors)
         );
@@ -57,16 +60,18 @@ namespace Microsoft.Quantum.Kata.QuantumClassification {
         parameters : Double[],
         bias : Double,
         tolerance  : Double,
-        nMeasurements : Int
+        nMeasurements : Int,
+        mode : Int,
+        auxil: Double[]
     )
     : Int[] {
         let model = Default<SequentialModel>()
-            w/ Structure <- ClassifierStructure()
+            w/ Structure <- LinearClassifierStructure()
             w/ Parameters <- parameters
             w/ Bias <- bias;
         let probabilities = EstimateClassificationProbabilities(
             tolerance, model,
-            samples, nMeasurements
+            Mapped(FeaturesPreprocess(mode, auxil, _), samples), nMeasurements
         );
         return InferredLabels(model::Bias, probabilities);
     }
